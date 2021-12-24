@@ -6,7 +6,7 @@ import pandas as pd
 
 ### Create cik_to_tickers_dict dictionary
 
-file_name = "company_tickers.json"
+file_name = "company_tickers.json" # downloaded from https://www.sec.gov/files/company_tickers.json
 cik_to_tickers_dict = {}
 
 f = open(file_name)
