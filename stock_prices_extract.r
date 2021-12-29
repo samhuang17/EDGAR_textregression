@@ -7,38 +7,12 @@ get_returns <- function(stock_symbol, from, to, period = "monthly") {
     tq_get(get = "stock.prices",
            from = from, 
            to = to) %>%
-    group_by(symbol) %>%
-    tq_transmute(select = adjusted,
-                 mutate_fun = periodReturn,
-                 type = "arithmetic",
-                 period = period)
+      group_by(symbol) %>%
+        tq_transmute(select = adjusted,
+                     mutate_fun = periodReturn,
+                     type = "arithmetic",
+                     period = period)
 }
-
-# get_returns <- function(stock.symbol, from, to, period = "monthly") {
-#   data = stock.symbol %>%
-#             tq_get(get = "stock.prices",
-#                    from = from,
-#                    to = to)
-#   res = NULL
-#   for (stock in stock.symbol) {
-#     if (stock == stock.symbol[1]) {
-#       res = tq_transmute(data[data$symbol == stock,], 
-#                          select = adjusted,
-#                          mutate_fun = periodReturn,
-#                          type = "arithmetic",
-#                          period = period)
-#     } else {
-#       res = cbind(res, tq_transmute(data[data$symbol == stock,],
-#                                     select = adjusted,
-#                                     mutate_fun = periodReturn,
-#                                     type = "arithmetic",
-#                                     period = period)[,2])
-#     }
-#   }
-#   names(res) = c("date", stock.symbol)
-#   return(res)
-# }
-
 
 ### Test
 from = "2012-01-01"
