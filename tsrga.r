@@ -68,7 +68,7 @@ comp_lambda = function(u, X, B, G) {
   return(max(min(lambda_uc, 1), 0))
 }
 
-rga = function(y, X, dims, L, Kn, G_init = NULL, B_init = NULL,
+rga = function(y, X, dims, L, Kn, B_init = NULL,
                mc_cores = 1, parallel = FALSE) {
   ###
   # rga: relaxed greedy algorithm
@@ -79,8 +79,8 @@ rga = function(y, X, dims, L, Kn, G_init = NULL, B_init = NULL,
   # dims: a vector of integers indicating the number of tasks and the dimensions
   #       of each of the predictors
   # L: user-prescribed parameter
-  # Kn: number of desired iterations
-  # G_init: initial guess for the fitted values; default is zero.
+  # Kn: number of desired iterations.
+  # w_init: initial values for the coefficient matrices; default is zero.
   # mc_cores: number of cores available for parallel computing
   # parallel: whether to perform parallel computing for the p variables.
   #
@@ -100,23 +100,17 @@ rga = function(y, X, dims, L, Kn, G_init = NULL, B_init = NULL,
   
   if (is.null(B_init)) {
     B = vector(mode = "list", length = p)
+    G = 0
   } else {
     B = B_init
-  }
-  if (is.null(G_init) && is.null(B_init)) {
-    G = 0
-  } else if (is.null(G_init) && !is.null(B_init)) {
     G = 0
     for (j in 1:p) {
       if (!is.null(B[[j]])) {
         G = G + X[[j]] %*% B[[j]]
       }
     }
-  } else {
-    # remember to check dimension
-    G = G_init
   }
-  
+
   u = y - G
   loss = rep(NA, Kn)
   lambda_seq = rep(NA, Kn)
@@ -173,7 +167,7 @@ tsrga = function(y, X, dims, L, Kn1, Kn2,
   selected_X = X[selected]
   B_init = res1$B[!sapply(res1$B, is.null)]
   new_dims = c(dims[1], dims[1 + selected])
-  res2 = rga(y, selected_X, new_dims, L, Kn2, G_init = res1$G, B_init = B_init,
+  res2 = rga(y, selected_X, new_dims, L, Kn2, B_init = B_init,
              mc_cores, parallel)
   
   p = length(dims) - 1
