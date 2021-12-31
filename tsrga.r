@@ -89,6 +89,8 @@ rga = function(y, X, dims, L, Kn, B_init = NULL,
   # J_hat: a vector of indices corresponding to selected variables.
   # path: a vector of indices representing the selected variables in each step.
   # G: fitted values matrix.
+  # loss: a sequence of training losses.
+  # lambda_seq: lambda's computed along the algorithm's path.
   ###
   
   p = length(dims) - 1
