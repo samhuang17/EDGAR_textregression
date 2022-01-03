@@ -6,13 +6,11 @@ targets = c("log_vol", "mean_return")
 
 ### Experiment parameters
 num_of_top_words = 2 # num_of_top_words must be >= 1
-target = targets[1]
+target = targets[2]
 y_lags = 2 # y_lags = 0 means no lagged variables included
-x_lags = 2 # x_lags = 0 means no lagged words included
+x_lags = 0 # x_lags = 0 means no lagged words included
            # max(x_lags, y_lags) must < 9
 train_por = 0.7
-mc_cores = 1
-prll = FALSE
 ###
 
 ### Loading data ###############################################################
@@ -166,48 +164,79 @@ for (i in 1:y_lags) {
   }
 }
 
-for (i in 1:x_lags) {
-  X_trans = lapply(unique(ciks), train_test_split_by_cik, ciks = ciks,
-                   data = X_lag[[i]], por = train_por)
-  for (j in 1:length(X_trans)) {
-    X_lag_train[[i]] = rbind(X_lag_train[[i]],
-                             X_trans[[j]]$training)
-    X_lag_test[[i]] = rbind(X_lag_test[[i]],
-                            X_trans[[j]]$test)
+if (x_lags > 0) {
+  for (i in 1:length(X_lag)) {
+    X_trans = lapply(unique(ciks), train_test_split_by_cik, ciks = ciks,
+                     data = X_lag[[i]], por = train_por)
+    for (j in 1:length(X_trans)) {
+      X_lag_train[[i]] = rbind(X_lag_train[[i]],
+                               X_trans[[j]]$training)
+      X_lag_test[[i]] = rbind(X_lag_test[[i]],
+                              X_trans[[j]]$test)
+    }
   }
 }
 
 rm(X_trans)
 rm(y_trans)
 
-cat("The training set contains", nrow(Y_train), "data points", "\n")
-if (max(table(Y_train[,1])) != min(table(Y_train[,1]))) {
-  stop("sample contains different year length for different companies.")
-}
-cat("It contians", length(unique(Y_train[,1])), "companies, over the horizon of",
-    mean(table(Y_train[,1])), "years", "\n")
-
-cat("The test set contains", nrow(Y_test), "data points", "\n")
-if (max(table(Y_test[,1])) != min(table(Y_test[,1]))) {
-  stop("sample contains different year length for different companies.")
-}
-cat("It contians", length(unique(Y_test[,1])), "companies, over the horizon of",
-    mean(table(Y_test[,1])), "years", "\n")
-
-
 # By now, we have the response matrix (vector) Y_train and Y_test
 # as well as the lagged response matrices (vectors) Y_lag_tran and Y_lag_test
 # and word embeddings X_train and X_test
 # as well as their lagged versions X_lag_train and X_lag_test
 
+features_train = vector(mode = "list", length = y_lags + num_of_top_words +
+                                                x_lags * num_of_top_words)
+features_test = vector(mode = "list", length = y_lags + num_of_top_words +
+                                               x_lags * num_of_top_words)
+if (y_lags) {
+  for (i in 1:y_lags) {
+    features_train[[i]] = Y_lag_train[[i]]
+    features_test[[i]] = Y_lag_test[[i]]
+  }
+}
+
+for (i in 1:num_of_top_words) {
+  features_train[[i + y_lags]] = X_train[[i]]
+  features_test[[i + y_lags]] = X_test[[i]]
+}
+
+if (x_lags) {
+  for (i in 1:x_lags) {
+    for (j in 1:num_of_top_words) {
+      features_train[[y_lags + i * num_of_top_words + j]] = X_lag_train[[(i - 1) * num_of_top_words + j]]
+      features_test[[y_lags + i * num_of_top_words + j]] = X_lag_test[[(i - 1) * num_of_top_words + j]]
+    }
+  }
+}
+
+rm(list = c("X", "X_aux", "X_lag", "X_lag_test", "X_lag_train", "X_test", "X_train",
+            "Y_aux", "Y_lag", "Y_lag_test", "Y_lag_train"))
+
 ### Train RGA ##################################################################
+
+# de-mean
+# scale/standardization
+# Benchmark model
+# n = length(Y_test)
+
+
+ols = lm(Y_train~features_train[[1]] + features_train[[2]])
+ols_pred = #ols$coefficients[1] + 
+           ols$coefficients[2] * features_test[[1]] +
+           ols$coefficients[3] * features_test[[2]]
+cat("Benchmark test set error is", sum((Y_test - ols_pred)^2) / n, "\n")
+
+
 
 dims = c(length(target), rep(length(target), y_lags), 
          rep(rep(200, num_of_top_words), x_lags + 1))
 
-features
-
-model_RGA = rga()
-
+model_RGA = rga(y = Y_train, X = features_train, dims = dims, Kn = 500, L = 100,
+                verbose = FALSE)
+model_TS = tsrga(y = Y_train, X = features_train, dims = dims,
+                 Kn1 = 200, Kn2 = 300, L = 1200)
+rga_eval(model_RGA, features_test, Y_test)
+rga_eval(model_TS, features_test, Y_test)
 
 

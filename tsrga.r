@@ -69,7 +69,7 @@ comp_lambda = function(u, X, B, G) {
 }
 
 rga = function(y, X, dims, L, Kn, B_init = NULL,
-               mc_cores = 1, parallel = FALSE) {
+               mc_cores = 1, parallel = FALSE, verbose = FALSE) {
   ###
   # rga: relaxed greedy algorithm
   # inputs:
@@ -153,6 +153,10 @@ rga = function(y, X, dims, L, Kn, B_init = NULL,
     G = (1 - lambda) * G + lambda * (X[[j_star]] %*% B_tilde)
     u = y - G
     loss[i] = sum(u^2) / n
+    
+    if (verbose) {
+      cat("iteration", i, "\n")
+    }
   }
   
   return(list("B" = B, "J_hat" = unique(J_hat), "path" = J_hat, "G" = G,
@@ -184,3 +188,22 @@ tsrga = function(y, X, dims, L, Kn1, Kn2,
               "path" = c(res1$path, selected[res2$path]), "G" = res2$G))
 }
 
+rga_eval = function(model, X, Y) {
+  matprod = function(i, A, B) {
+    return(A[[i]] %*% B[[i]])
+  }
+  pred = lapply(model$J_hat, matprod, B = model$B, A = X)
+  pred = Reduce('+', pred)
+  
+  if (is.vector(Y)) {
+    n = length(Y)
+  } else if (is.matrix(Y)) {
+    n = nrow(Y)
+  } else {
+    stop("rga_eval: Y is neither matrix nor vector.")
+  }
+  
+  error = Y - pred
+
+  return( sum(error^2) / n )
+}
