@@ -31,11 +31,11 @@ for (ticker in tickers) {
       temp = c(ticker, yr, log(var(year_returns)), mean(year_returns))
       final_dta = rbind(final_dta, temp)
     }
+    cat(pos, "/", length(tickers), " tickers completed", "\n")
   } else {
     cat(paste0("ticker failed: ", ticker, "\n"))
     failed_tickers = c(failed_tickers, ticker)
   }
-  cat(pos, "/", length(tickers), " tickers completed", "\n")
   pos = pos + 1
 }
 
@@ -71,8 +71,8 @@ dta = dta[dta$V2 %in% final_tickers,]
 res = cbind(dta[,1:3], as.numeric(final_dta[,3]), as.numeric(final_dta[,4]),
             dta[,4:203])
 
-length(unique(res[,2])) # 2,344 companies
-dim(res)[1] # 23,440 observations
+length(unique(res[,2])) # 1,927 companies
+dim(res)[1] # 19,270 observations
 
 names(res) = c("CIK", "ticker", "year", "log_vol", "mean_return", 
                paste0("V", 1:200))
