@@ -10,6 +10,20 @@ tr = function(X) {
   return(sum(diag(X)))
 }
 
+matlist_prod = function(indices, mlst1, mlst2, dims) {
+  mat_prod = function(idx, mlst1, mlst2, dims) {
+    if (dims[idx] == 1) {
+      return(mlst1[[idx]] * mlst2[[idx]])
+    } else {
+      return(mlst1[[idx]] %*% mlst2[[idx]])
+    }
+  }
+  
+  res = lapply(indices, mat_prod, mlst1, mlst2, dims)
+  
+  return(Reduce('+', res))
+}
+
 comp_ip = function(u, X, u_dim, x_dim, L) {
   if (u_dim == 1) {
     u = as.vector(u)
@@ -21,24 +35,25 @@ comp_ip = function(u, X, u_dim, x_dim, L) {
   
   if (u_dim == 1 && x_dim == 1) {
     if (length(u_x) > 1) {
-      stop(paste0("u_x should be scalar; length(u_x) = ", length(u_x)))
+      stop(paste0("comp_ip: u_x should be scalar; length(u_x) = ", length(u_x)))
     }
   } else if (u_dim == 1 && x_dim > 1) {
     if (length(u_x) != x_dim) {
-      stop(paste0("u_x should be of length ", x_dim, "; length(u_x) = ", 
+      stop(paste0("comp_ip: u_x should be of length ", x_dim, "; length(u_x) = ", 
                   length(u_x)))
     }
   } else if (u_dim > 1 && x_dim == 1) {
     if (length(u_x) != u_dim) {
-      stop(paste0("u_x should be of length ", u_dim, "; length(u_x) = ",
+      stop(paste0("comp_ip: u_x should be of length ", u_dim, "; length(u_x) = ",
                   length(u_x)))
     }
   } else {
     if (!is.matrix(u_x)) {
-      stop("u_x shuould be a matrix.")
+      stop("comp_ip: u_x shuould be a matrix.")
     }
     if (dim(u_x)[1] != u_dim || dim(u_x)[2] != x_dim) {
-      stop(paste0("u_x incorrect dimensions: ", dim(u_x)[1], ", ", dim(u_x)[2]))
+      stop(paste0("comp_ip: u_x incorrect dimensions: ", dim(u_x)[1], ", ", 
+                  dim(u_x)[2]))
     }
   }
   
@@ -68,10 +83,18 @@ comp_lambda = function(u, X, B, G) {
   return(max(min(lambda_uc, 1), 0))
 }
 
-rga = function(y, X, dims, L, Kn, B_init = NULL,
-               mc_cores = 1, parallel = FALSE, verbose = FALSE) {
+data_mean = function(dim, data) {
+  if (dim == 1) {
+    return(mean(data))
+  } else {
+    return(colMeans(data))
+  }
+}
+
+rga_core = function(y, X, dims, L, Kn, B_init = NULL, mc_cores = 1, 
+                    parallel = FALSE, verbose = FALSE) {
   ###
-  # rga: relaxed greedy algorithm
+  # rga_core: relaxed greedy algorithm core function
   # inputs:
   # y: an n by M matrix of the response variables, where M = number of tasks.
   # X: a list of covariate observation matrices. X should have p elements, each 
@@ -100,6 +123,7 @@ rga = function(y, X, dims, L, Kn, B_init = NULL,
     n = dim(y)[1]
   }
   
+  # Initialization
   if (is.null(B_init)) {
     B = vector(mode = "list", length = p)
     G = 0
@@ -159,15 +183,58 @@ rga = function(y, X, dims, L, Kn, B_init = NULL,
     }
   }
   
-  return(list("B" = B, "J_hat" = unique(J_hat), "path" = J_hat, "G" = G,
-              "loss" = loss, "lambda_seq" = lambda_seq))
+  return(list("B" = B, "J_hat" = unique(J_hat), "path" = J_hat,
+              "G" = G, "loss" = loss, "lambda" = lambda_seq))
+}
+  
+rga = function(y, X, dims, L, Kn, B_init = NULL, mc_cores = 1, 
+               parallel = FALSE, scale = TRUE, verbose = FALSE) {
+  ###
+  # rga: wrapper to implement RGA
+  ###
+  
+  # Pre-processing
+  p = length(dims) - 1
+  y_means = data_mean(dim = dims[1], data = y)
+  x_means = vector(mode = "list", length = p)
+  
+  if (dims[1] == 1) {
+    y = y - y_means
+  } else {
+    y = t(t(y) - y_means)
+  }
+
+  for (i in 1:p) {
+    x_means[[i]] = data_mean(dim = dims[i + 1], data = X[[i]])
+    if (dims[i + 1] > 1) {
+      if (scale) {
+        X[[i]] = t((t(X[[i]]) - x_means[[i]])) # / sqrt(dims[i + 1])
+      } else {
+        X[[i]] = t(t(X[[i]]) - x_means[[i]])
+      }
+    } else {
+      X[[i]] = X[[i]] - x_means[[i]]
+    }
+  }
+  
+  # Run RGA using core function
+  model = rga_core(y = y, X = X, dims = dims, L = L, Kn = Kn, B_init = B_init,
+                   mc_cores = mc_cores, parallel = parallel, verbose = verbose)
+  
+  # Calculate intercept term
+  fitted_val = t(t(model$G) + y_means)
+
+  return(list("B" = model$B, "J_hat" = model$J_hat, 
+              "path" = model$path, "fitted_values" = fitted_val, 
+              "loss" = model$loss, "y_means" = y_means, "x_means" = x_means))
 }
 
-tsrga = function(y, X, dims, L, Kn1, Kn2, 
-                 mc_cores = 1, parallel = FALSE) {
+tsrga = function(y, X, dims, L, Kn1, Kn2, mc_cores = 1, 
+                 parallel = FALSE, verbose = FALSE) {
   ###
-  # tsrga: two-stage relaxed greedy algorithm
+  # tsrga: wrapper for two-stage relaxed greedy algorithm
   ###
+  
   res1 = rga(y, X, dims, L, Kn1, mc_cores = mc_cores, parallel = parallel)
   selected = sort(res1$J_hat)
   selected_X = X[selected]
@@ -185,25 +252,23 @@ tsrga = function(y, X, dims, L, Kn1, Kn2,
   }
   
   return(list("B" = B_hat, "J_hat" = selected, 
-              "path" = c(res1$path, selected[res2$path]), "G" = res2$G))
+              "path" = c(res1$path, selected[res2$path]), 
+              "fitted_values" = res2$fitted_values,
+              "y_means" = res2$y_means,
+              "x_means" = res1$x_means))
 }
 
-rga_eval = function(model, X, Y) {
-  matprod = function(i, A, B) {
-    return(A[[i]] %*% B[[i]])
-  }
-  pred = lapply(model$J_hat, matprod, B = model$B, A = X)
-  pred = Reduce('+', pred)
+rga_eval = function(rga_model, new_X, new_Y = NULL, dims) {
   
-  if (is.vector(Y)) {
-    n = length(Y)
-  } else if (is.matrix(Y)) {
-    n = nrow(Y)
+  p = length(new_X)
+  B0 = rga_model$y_means - matlist_prod(1:p, rga_model$x_means, rga_model$B, dims)
+  pred = matlist_prod(1:p, new_X, rga_model$B, dims)
+  pred = t(t(pred) + c(B0))
+    
+  if (is.null(new_Y)) {
+    return(list("pred" = pred))
   } else {
-    stop("rga_eval: Y is neither matrix nor vector.")
+    n = ifelse(dims[1] == 1, length(new_Y), nrow(new_Y))
+    return(list("pred" = pred, "mse" = sum((new_Y - pred)^2)/ n))
   }
-  
-  error = Y - pred
-
-  return( sum(error^2) / n )
 }
