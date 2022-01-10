@@ -12,8 +12,13 @@ tr = function(X) {
 
 matlist_prod = function(indices, mlst1, mlst2, dims) {
   mat_prod = function(idx, mlst1, mlst2, dims) {
-    if (dims[idx] == 1) {
-      return(mlst1[[idx]] * mlst2[[idx]])
+    # if (dims[idx] == 1) {
+    #   return(mlst1[[idx]] * mlst2[[idx]])
+    # } else {
+    #   return(mlst1[[idx]] %*% mlst2[[idx]])
+    # }
+    if (is.null(mlst2[[idx]])) {
+      return(0)
     } else {
       return(mlst1[[idx]] %*% mlst2[[idx]])
     }
@@ -261,7 +266,7 @@ tsrga = function(y, X, dims, L, Kn1, Kn2, mc_cores = 1,
 rga_eval = function(rga_model, new_X, new_Y = NULL, dims) {
   
   p = length(new_X)
-  B0 = rga_model$y_means - matlist_prod(1:p, rga_model$x_means, rga_model$B, dims)
+  B0 = rga_model$y_means - matlist_prod(1:p, rga_model$x_means, rga_model$B, dims[-1])
   pred = matlist_prod(1:p, new_X, rga_model$B, dims)
   pred = t(t(pred) + c(B0))
     
@@ -271,4 +276,15 @@ rga_eval = function(rga_model, new_X, new_Y = NULL, dims) {
     n = ifelse(dims[1] == 1, length(new_Y), nrow(new_Y))
     return(list("pred" = pred, "mse" = sum((new_Y - pred)^2)/ n))
   }
+}
+
+path_summary = function(rga_model) {
+  J_hat = rga_model$J_hat
+  path = rga_model$path
+  res = matrix(NA, ncol = length(J_hat), nrow = 2)
+  for (j in 1:length(J_hat)) {
+    res[1,j] = J_hat[j]
+    res[2,j] = which(path == J_hat[j])[1]
+  }
+  return(res)
 }

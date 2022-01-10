@@ -1,12 +1,11 @@
 
 ### Do not alter.
-library(parallel)
 targets = c("log_vol", "mean_return")
 ###
 
 ### Experiment parameters
 num_of_top_words = 2 # num_of_top_words must be >= 1
-target = targets[2]
+target = targets[1]
 y_lags = 2 # y_lags = 0 means no lagged variables included
 x_lags = 0 # x_lags = 0 means no lagged words included
            # max(x_lags, y_lags) must < 9
@@ -39,6 +38,14 @@ X = as.matrix(dta[,-c(1:5)])
 lags = max(y_lags, x_lags)
 if (lags >= 9) {
   stop("too many lags used.")
+}
+
+for (i in 1:nrow(X)) {
+  embeddings = matrix(X[i,], nrow = num_of_top_words, 
+                             ncol = 200, byrow = TRUE)
+  pc_obj = prcomp(embeddings, center = FALSE, scale. = FALSE)
+  pc = t(t(pc_obj$rotation) * pc_obj$sdev)
+  X[i,] = c(pc)
 }
 
 ### Taking lags ################################################################
@@ -189,6 +196,9 @@ features_train = vector(mode = "list", length = y_lags + num_of_top_words +
                                                 x_lags * num_of_top_words)
 features_test = vector(mode = "list", length = y_lags + num_of_top_words +
                                                x_lags * num_of_top_words)
+y_means = NULL
+x_means = NULL
+
 if (y_lags) {
   for (i in 1:y_lags) {
     features_train[[i]] = Y_lag_train[[i]]
@@ -220,23 +230,30 @@ rm(list = c("X", "X_aux", "X_lag", "X_lag_test", "X_lag_train", "X_test", "X_tra
 # Benchmark model
 # n = length(Y_test)
 
-
-ols = lm(Y_train~features_train[[1]] + features_train[[2]])
-ols_pred = #ols$coefficients[1] + 
-           ols$coefficients[2] * features_test[[1]] +
-           ols$coefficients[3] * features_test[[2]]
-cat("Benchmark test set error is", sum((Y_test - ols_pred)^2) / n, "\n")
-
-
-
 dims = c(length(target), rep(length(target), y_lags), 
          rep(rep(200, num_of_top_words), x_lags + 1))
+n_test = ifelse(dims[1] == 1, length(Y_test), nrow(Y_test))
 
-model_RGA = rga(y = Y_train, X = features_train, dims = dims, Kn = 500, L = 100,
-                verbose = FALSE)
-model_TS = tsrga(y = Y_train, X = features_train, dims = dims,
-                 Kn1 = 200, Kn2 = 300, L = 1200)
-rga_eval(model_RGA, features_test, Y_test)
-rga_eval(model_TS, features_test, Y_test)
+ols = lm(Y_train~features_train[[1]] + features_train[[2]])
+ols_pred = ols$coefficients[1] + 
+           ols$coefficients[2] * features_test[[1]] +
+           ols$coefficients[3] * features_test[[2]]
+cat("Benchmark OLS test set error is", sum((Y_test - ols_pred)^2) / n_test, "\n")
+
+ols = lm(Y_train~0+features_train[[1]] + features_train[[2]])
+ols_pred = ols$coefficients[1] * features_test[[1]] +
+           ols$coefficients[2] * features_test[[2]]
+cat("Benchmark AR(2) test set error is", sum((Y_test - ols_pred)^2) / n_test, "\n")
+
+
+mod_rga = rga(y = Y_train, X = features_train, dims = dims, Kn = 100, L = 100)
+res1 = rga_eval(mod_rga, features_test, Y_test, dims)
+print(res1$mse)
+print(path_summary(mod_rga))
+
+mod_tsrga = tsrga(y = Y_train, X = features_train, dims = dims, L = 100,
+                 Kn1 = 30, Kn2 = 70)
+res2 = rga_eval(mod_tsrga, features_test, Y_test, dims)
+print(res2$mse)
 
 
