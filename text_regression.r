@@ -48,6 +48,7 @@ for (i in 1:nrow(X)) {
   X[i,] = c(pc)
 }
 
+print("data loaded")
 ### Taking lags ################################################################
 
 ciks = dta[,1]
@@ -105,6 +106,7 @@ for (i in 1:length(y_trans)) {
   }
 }
 
+print("lags took")
 ### Train-test split ###########################################################
 
 train_test_split_by_cik = function(cik, ciks, data, por) {
@@ -154,9 +156,9 @@ for (i in 1:num_of_top_words) {
                    data = X_aux[[i]], por = train_por)
   for (j in 1:length(X_trans)) {
     X_train[[i]] = rbind(X_train[[i]],
-                         as.matrix(X_trans[[j]]$training))
+                         X_trans[[j]]$training)
     X_test[[i]] = rbind(X_test[[i]],
-                        as.matrix(X_trans[[j]]$test))
+                        X_trans[[j]]$test)
   }
 }
 
@@ -223,6 +225,7 @@ if (x_lags) {
 rm(list = c("X", "X_aux", "X_lag", "X_lag_test", "X_lag_train", "X_test", "X_train",
             "Y_aux", "Y_lag", "Y_lag_test", "Y_lag_train"))
 
+print("data preparation finished")
 ### Train RGA ##################################################################
 
 # de-mean
@@ -246,13 +249,14 @@ ols_pred = ols$coefficients[1] * features_test[[1]] +
 cat("Benchmark AR(2) test set error is", sum((Y_test - ols_pred)^2) / n_test, "\n")
 
 
-mod_rga = rga(y = Y_train, X = features_train, dims = dims, Kn = 100, L = 100)
+mod_rga = rga(y = Y_train, X = features_train, dims = dims, Kn = 40, 
+              L = 100 * sqrt(num_of_top_words))
 res1 = rga_eval(mod_rga, features_test, Y_test, dims)
 print(res1$mse)
 print(path_summary(mod_rga))
 
-mod_tsrga = tsrga(y = Y_train, X = features_train, dims = dims, L = 100,
-                 Kn1 = 30, Kn2 = 70)
+mod_tsrga = tsrga(y = Y_train, X = features_train, dims = dims, 
+                  L = 100 * sqrt(num_of_top_words), Kn1 = 20, Kn2 = 20)
 res2 = rga_eval(mod_tsrga, features_test, Y_test, dims)
 print(res2$mse)
 
