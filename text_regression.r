@@ -222,12 +222,34 @@ if (x_lags) {
   }
 }
 
-rm(list = c("X", "X_aux", "X_lag", "X_lag_test", "X_lag_train", "X_test", "X_train",
-            "Y_aux", "Y_lag", "Y_lag_test", "Y_lag_train"))
+rm(list = c("X", "X_aux", "X_lag", "X_lag_test", "X_lag_train", "X_test", 
+            "X_train", "Y_aux", "Y_lag", "Y_lag_test", "Y_lag_train"))
 
 print("data preparation finished")
-### Train RGA ##################################################################
+### Plot (if needed) ###########################################################
+par(mfrow = c(1,3), cex.lab = 1.5)
 
+plot(x = log(abs(Y_train[which(Y_train[,2] > 0),2])), 
+     y = Y_train[which(Y_train[,2] > 0),1], 
+     xlab = "log |mean return|", ylab = "log(volatility)", pch = 20, 
+     col = "blue", xlim=c(-15,5))
+
+points(x = log(abs(Y_train[which(Y_train[,2] < 0),2])), 
+       y = Y_train[which(Y_train[,2] < 0),1], 
+       pch=20, col="red")
+
+legend("topleft", legend = c("mean return > 0", "mean return < 0"), 
+       pch = c(20, 20), col = c("blue", "red"))
+
+plot(x = Y_train[,1], y = features_train[[1]][,1], pch = 20,
+     col = "black", xlab = "lagged log volatility",
+     ylab = "log volatility")
+
+plot(x = Y_train[,2], y = features_train[[1]][,2], pch = 20,
+     col = "black", xlab = "lagged mean return",
+     ylab = "mean return")
+
+### Train RGA ##################################################################
 
 dims = c(length(target), rep(length(target), y_lags), 
          rep(rep(200, num_of_top_words), x_lags + 1))
@@ -239,13 +261,35 @@ if (length(target) == 1) {
   ols_pred = ols$coefficients[1] + 
              ols$coefficients[2] * features_test[[1]] +
              ols$coefficients[3] * features_test[[2]]
-  cat("Benchmark OLS test set error is", sum((Y_test - ols_pred)^2) / n_test, "\n")
+  cat("AR(2) with intercept test set error is", 
+      sum((Y_test - ols_pred)^2) / n_test, "\n")
 
   ols = lm(Y_train~0+features_train[[1]] + features_train[[2]])
   ols_pred = ols$coefficients[1] * features_test[[1]] +
              ols$coefficients[2] * features_test[[2]]
-  cat("Benchmark AR(2) test set error is", sum((Y_test - ols_pred)^2) / n_test, "\n")
+  cat("AR(2) test set error is", sum((Y_test - ols_pred)^2) / n_test, "\n")
 } else {
+  ols1 = lm(Y_train[,1]~features_train[[1]])
+  ols_pred1 = ols1$coefficients[1] +
+              ols1$coefficients[2] * features_test[[1]][,1] +
+              ols1$coefficients[3] * features_test[[1]][,2]
+  ols2 = lm(Y_train[,2]~features_train[[1]])
+  ols_pred2 = ols2$coefficients[1] +
+              ols2$coefficients[2] * features_test[[1]][,1] +
+              ols2$coefficients[3] * features_test[[1]][,2]
+  ols_pred = cbind(ols_pred1, ols_pred2)
+  cat("VAR(1) with intercept test set error is", 
+      sum((Y_test - ols_pred)^2) / n_test, "\n")
+  
+  ols1 = lm(Y_train[,1]~0 + features_train[[1]])
+  ols_pred1 = ols1$coefficients[1] * features_test[[1]][,1] +
+              ols1$coefficients[2] * features_test[[1]][,2] 
+  ols2 = lm(Y_train[,2]~0 + features_train[[1]])
+  ols_pred2 = ols2$coefficients[1] * features_test[[1]][,1] +
+              ols2$coefficients[2] * features_test[[1]][,2]
+  ols_pred = cbind(ols_pred1, ols_pred2)
+  cat("VAR(2) test set error is", sum((Y_test - ols_pred)^2) / n_test, "\n")
+
   ols1 = lm(Y_train[,1]~features_train[[1]] + features_train[[2]])
   ols_pred1 = ols1$coefficients[1] +
               ols1$coefficients[2] * features_test[[1]][,1] +
@@ -259,7 +303,8 @@ if (length(target) == 1) {
               ols2$coefficients[4] * features_test[[2]][,1] +
               ols2$coefficients[5] * features_test[[2]][,2]
   ols_pred = cbind(ols_pred1, ols_pred2)
-  cat("Benchmark OLS test set error is", sum((Y_test - ols_pred)^2) / n_test, "\n")
+  cat("VAR(2) with intercept test set error is", 
+      sum((Y_test - ols_pred)^2) / n_test, "\n")
 
   ols1 = lm(Y_train[,1]~0 + features_train[[1]] + features_train[[2]])
   ols_pred1 = ols1$coefficients[1] * features_test[[1]][,1] +
@@ -272,7 +317,7 @@ if (length(target) == 1) {
               ols2$coefficients[3] * features_test[[2]][,1] +
               ols2$coefficients[4] * features_test[[2]][,2]
   ols_pred = cbind(ols_pred1, ols_pred2)
-  cat("Benchmark AR(2) test set error is", sum((Y_test - ols_pred)^2) / n_test, "\n")
+  cat("VAR(2) test set error is", sum((Y_test - ols_pred)^2) / n_test, "\n")
 }
 
 mod_rga = rga(y = Y_train, X = features_train, dims = dims, Kn = 40, 
